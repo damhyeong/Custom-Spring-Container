@@ -414,16 +414,20 @@ public class ResolveDependency {
                 e.printStackTrace();
             }
 
-            // detectDependency 메서드를 통해 "타겟 인스턴스" 의 의존성이 해소되었는지 확인한다.
-            boolean isRemainDependency = this.detectDependency(targetObject, mode);
+            // Lazy 의존성 해소 모드가 아닌 경우에만 실행한다.
+            if(mode.equals("normal")) {
+                // detectDependency 메서드를 통해 "타겟 인스턴스" 의 의존성이 해소되었는지 확인한다.
+                boolean isRemainDependency = this.detectDependency(targetObject);
 
-            System.out.println("isRemainDependency : " + isRemainDependency);
+                System.out.println("isRemainDependency : " + isRemainDependency);
 
-            // 의존성이 모두 해소되었다면, 완성 인스턴스 큐에 새로 추가한다.
-            if(!isRemainDependency) {
-                completeQueue.add(new CompleteObject(targetObject.getClass().getName(), targetObject));
-                System.out.println("targetObject.name : " + targetObject.getClass().getName());
+                // 의존성이 모두 해소되었다면, 완성 인스턴스 큐에 새로 추가한다.
+                if(!isRemainDependency) {
+                    completeQueue.add(new CompleteObject(targetObject.getClass().getName(), targetObject));
+                    System.out.println("targetObject.name : " + targetObject.getClass().getName());
+                }
             }
+
         }
     }
 
@@ -487,16 +491,12 @@ public class ResolveDependency {
 
     // 타겟 인스턴스의 의존성이 모두 해소되지 않았다면, (x > 0) true 를 반환한다.
     // 의존성이 모두 해소(x == 0) 되었다면, false 를 반환한다.
-    private boolean detectDependency(Object targetObject, String mode) {
+    private boolean detectDependency(Object targetObject) {
         AtomicInteger remainDependency = this.dependencyTracker.get(targetObject);
 
         int result = remainDependency.get();
 
         System.out.println("(detectDependency in " + targetObject.toString() + ") : " + result);
-
-        if(mode.equals("lazy")) {
-            return result != 0;
-        }
 
         // 멀티스레드 상황은 고려하지 않은 코드이긴 하다.
         remainDependency.set(result - 1);
