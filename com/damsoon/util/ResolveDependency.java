@@ -206,10 +206,8 @@ public class ResolveDependency {
             // 의존성 대기 "리스트" 에서 Iterator 를 따로 추출한다.
             Iterator<WaitingField> waitingIter = waitingFieldList.iterator();
 
-            String insertMode = "normal";
-
             // 순회하며 의존성을 넣어준다.
-            this.insertRealInstance(waitingIter, instance, insertMode);
+            this.insertRealInstance(waitingIter, instance, DependencyMode.NORMAL);
 
             // fullName(com.damsoon.component.xxx) 를 필요로 하는 모든 인스턴스에
             // 의존성을 "실제로" 넣어줬으므로, 대기 Map 에서 제거한다.
@@ -274,10 +272,8 @@ public class ResolveDependency {
             // 원하는 인스턴스를 기다리는 여러 Field 배열
             List<WaitingField> lazyList = this.lazyMap.get(lazyKey);
 
-            String insertMode = "lazy";
-
             // 이 의존성을 원하는 필드들 모두 의존성 해소.
-            this.insertRealInstance(lazyList.iterator(), instance, insertMode);
+            this.insertRealInstance(lazyList.iterator(), instance, DependencyMode.LAZY);
 
             // lazy 에서 의존 인스턴스를 제거한다.
             this.lazyMap.remove(lazyKey);
@@ -390,7 +386,7 @@ public class ResolveDependency {
 
     // 가짜 의존성으로 생성된 인스턴스가 대기 맵을 통해 하나씩 실제 의존성을 가지게 된다.
     // 만약 모든 의존성이 갖춰진 인스턴스로 변모한다면, 완성 인스턴스 큐에 등록한다.
-    private void insertRealInstance(Iterator<WaitingField> iterator, Object realInstance, String mode) {
+    private void insertRealInstance(Iterator<WaitingField> iterator, Object realInstance, DependencyMode mode) {
         while(iterator.hasNext()) {
             WaitingField waitingField = iterator.next();
 
@@ -415,7 +411,7 @@ public class ResolveDependency {
             }
 
             // Lazy 의존성 해소 모드가 아닌 경우에만 실행한다.
-            if(mode.equals("normal")) {
+            if(mode == DependencyMode.NORMAL) {
                 // detectDependency 메서드를 통해 "타겟 인스턴스" 의 의존성이 해소되었는지 확인한다.
                 boolean isRemainDependency = this.detectDependency(targetObject);
 
