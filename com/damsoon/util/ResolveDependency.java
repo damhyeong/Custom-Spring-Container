@@ -62,6 +62,7 @@ public class ResolveDependency {
     // 3. 프록시가 적용될 객체 클래스의 모든 정보. --> 구현된 인터페이스를 모두 추출하기 위함
     public Object insertProxy(Class<?> handlerInfo, Object instance, Class<?> clazzInfo) throws NoSuchMethodException, InvocationTargetException, InstantiationException, IllegalAccessException {
 
+
         Constructor handlerConstructor = handlerInfo.getConstructor(Object.class);
 
         InvocationHandler handlerInstance = (InvocationHandler) handlerConstructor.newInstance(instance);
@@ -155,7 +156,7 @@ public class ResolveDependency {
 
                 dependencyCount -= lazyCount;
 
-                System.out.println("dependencyCount : " + dependencyCount);
+                System.out.println("normal-dependency Count : " + dependencyCount);
 
                 if(dependencyCount == 0) {
                     // 존재하는 의존성이 모두 Lazy 라면, 해당 의존성들은 모두 해결 된 것으로 보아야 한다.
@@ -494,10 +495,7 @@ public class ResolveDependency {
 
         System.out.println("(detectDependency in " + targetObject.toString() + ") : " + result);
 
-        // 멀티스레드 상황은 고려하지 않은 코드이긴 하다.
-        remainDependency.set(result - 1);
-
-        result--;
+        remainDependency.set(--result);
 
         System.out.println("(detectDependency in " + targetObject.toString() + ") : " + result);
 
