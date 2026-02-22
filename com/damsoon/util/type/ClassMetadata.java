@@ -8,7 +8,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class ClassMetadata {
-    Map<String, Annotation> clazzAnnotationMap;
+    Map<Class<? extends Annotation>, Annotation> clazzAnnotationMap;
     ParamMetadata[] paramDataList;
 
     public ClassMetadata (Annotation[] clazzAnnotations, Parameter[] params, Annotation[][] paramAnnotations) {
@@ -16,9 +16,8 @@ public class ClassMetadata {
 
         // Map<String, Annotation> 으로 바꿔야 한다.
         for(Annotation annotation : clazzAnnotations) {
-            Class<?> clazz = annotation.annotationType();
-            String fullName = clazz.getName();
-            this.clazzAnnotationMap.put(fullName, annotation);
+            Class<? extends Annotation> clazz = annotation.annotationType();
+            this.clazzAnnotationMap.put(clazz, annotation);
         }
 
         this.paramDataList = new ParamMetadata[params.length];
@@ -36,7 +35,7 @@ public class ClassMetadata {
         }
     }
 
-    public Map<String, Annotation> getClazzAnnotationMap (){
+    public Map<Class<? extends Annotation>, Annotation> getClazzAnnotationMap (){
         return this.clazzAnnotationMap;
     }
     public ParamMetadata[] getParamDataList() {

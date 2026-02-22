@@ -1,8 +1,7 @@
 package com.damsoon.util;
 
-import com.damsoon.annotation.MyAutowired;
-import com.damsoon.annotation.MyComponent;
-import com.damsoon.annotation.MyLazy;
+import com.damsoon.annotation.*;
+import com.damsoon.util.console.ColorText;
 import com.damsoon.util.type.ClassMetadata;
 import com.damsoon.util.type.CompleteObject;
 import com.damsoon.util.type.ParamMetadata;
@@ -76,6 +75,19 @@ public class ResolveDependency {
         return proxyObject;
     }
 
+    public Object insertProxies(Iterator<MyProxy> iterator, Object instance, Class<?> clazz) {
+        while(iterator.hasNext()) {
+            MyProxy tmpProxy = iterator.next();
+            try {
+                instance = insertProxy(tmpProxy.doProxy(), instance, clazz);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        return instance;
+    }
+
     // Queue 가 비워졌는데도 불구하고, 여전히 Map 에 대기중인 인스턴스들이 존재할 경우 실행한다.
     // 여기서 멈추어서, "@MyLazy" 와의 궁합을 통한 순환참조 해결에 초점을 두어야 한다.
     // Solution 1 : MyLazy 선언된 의존성을 따로 모아 "맨 마지막 로직" 에서 의존성을 해결한다. - MyLazy 감지 시 기본 의존성 맵에 등록 x
@@ -120,7 +132,7 @@ public class ResolveDependency {
 
             // 객체에 붙은 애너테이션들
             // MyComponent, MyProxy || MyProxies 확인을 위함
-            Map<String, Annotation> clazzAnno = clazzInfo.getClazzAnnotationMap();
+            Map<Class<? extends Annotation>, Annotation> clazzAnno = clazzInfo.getClazzAnnotationMap();
 
             // 지정된 생성자의 파라미터 수를 의미한다.
             int paramCount = constructor.getParameterCount();
@@ -131,7 +143,7 @@ public class ResolveDependency {
 
             // 생성자 인자가 없을 경우, 처음부터 "완성된 객체" 로 가정한다.
             // 이는 준비 과정에 해당. --> 의존성 직접 해결 과정이 아님.
-            Object instance = createInstance(paramCount, constructor, clazzInfo);
+            Object instance = this.createInstance(paramCount, constructor, clazzInfo);
 
             // 의존성이 필요 없을 경우, 완성된 인스턴스로서 바로 완료 큐에 넣는다.
             if(dependencyCount == 0) {
@@ -168,12 +180,32 @@ public class ResolveDependency {
 
             }
 
-            // Testing
-            Iterator<String> iter = clazzAnno.keySet().iterator();
+            System.out.println("객체에 붙은 애너테이션 사이즈 : " + clazzAnno.size());
 
-            while(iter.hasNext()) {
-                System.out.println("객체에 붙은 애너테이션 : " + iter.next());
+            // "객체" 단계는 완성됨 (비록 비완성일 수도 있지만.) --> 프록시 적용
+            MyProxy proxy = (MyProxy) clazzAnno.get(MyProxy.class);
+            MyProxies proxies = (MyProxies) clazzAnno.get(MyProxies.class);
+
+            // MyProxy 가 단일 혹은 다중으로 존재한다면 실행되는 분기.
+            if(proxy != null || proxies != null) {
+                System.out.println(ColorText.cyan("proxy or proxies 가 있다."));
+
+                List<MyProxy> proxyList = new ArrayList<>();
+
+                if(proxy != null) {
+                    proxyList.add(proxy);
+                } else { // proxies 가 있는 상황
+                    MyProxy[] proxyArr = proxies.value();
+                    for(int i = 0; i < proxyArr.length; i++) {
+                        proxyList.add(proxyArr[i]);
+                    }
+                }
+
+                // proxy 적용
+                Iterator<MyProxy> proxyIterator = proxyList.iterator();
+                instance = insertProxies(proxyIterator, instance, clazz);
             }
+
 
 
         }
@@ -221,7 +253,7 @@ public class ResolveDependency {
         Iterator<String> singletonIter = this.singletonContainer.keySet().iterator();
         while(singletonIter.hasNext()) {
             String key = singletonIter.next();
-            System.out.println("현재 싱글톤에 들어있는 완성 인스턴스 이름 : " + key);
+            System.out.println(ColorText.yellow("현재 싱글톤에 들어있는 완성 인스턴스 이름 : " + key));
         }
 
         // MyLazy 로 인해 lazyMap 에 의존성이 등록되어 있다면, 무조건 해소 해 주어야 한다.
@@ -381,6 +413,9 @@ public class ResolveDependency {
                 throw new RuntimeException(e);
             }
         }
+
+        Annotation proxy = classMetadata.getClazzAnnotationMap().get("com.damsoon.annotation.MyProxy");
+
 
         return instance;
     }
