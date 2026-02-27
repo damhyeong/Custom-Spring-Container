@@ -7,5 +7,6 @@ import java.lang.annotation.*;
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
 public @interface MyProxies {
-    MyProxy[] value();
+    Class<?>[] proxies();
+    Class<?> targetInterface();
 }

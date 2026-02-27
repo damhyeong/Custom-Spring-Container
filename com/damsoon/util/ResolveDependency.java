@@ -2,10 +2,7 @@ package com.damsoon.util;
 
 import com.damsoon.annotation.*;
 import com.damsoon.util.console.ColorText;
-import com.damsoon.util.type.ClassMetadata;
-import com.damsoon.util.type.CompleteObject;
-import com.damsoon.util.type.ParamMetadata;
-import com.damsoon.util.type.WaitingField;
+import com.damsoon.util.type.*;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
@@ -55,6 +52,30 @@ public class ResolveDependency {
         return classMetadata;
     }
 
+    public Object proxyProcess(MyProxy proxy, MyProxies proxies, Object instance, Class<?> clazz) {
+
+        System.out.println(ColorText.cyan("proxy or proxies 가 있다."));
+
+        List<ProxyInfo> proxyList = new ArrayList<>();
+
+        // proxy 적용 중 targetInterface 용도가 존재할 수도 있기에 자료구조 추가.
+        if(proxy != null) {
+            proxyList.add(new ProxyInfo(proxy.handler(), proxy.targetInterface()));
+        } else { // proxies 가 있는 상황
+            Class<?>[] proxyArr = proxies.proxies();
+            Class<?> targetInterface = proxies.targetInterface();
+            for(int i = 0; i < proxyArr.length; i++) {
+                proxyList.add(new ProxyInfo(proxyArr[i], targetInterface));
+            }
+        }
+
+        // proxy 적용
+        Iterator<ProxyInfo> proxyIterator = proxyList.iterator();
+        instance = this.insertProxies(proxyIterator, instance, clazz);
+
+        return instance;
+    }
+
     // 프록시 객체 생성에 필요한 3 가지가 인자로 들어가는데,
     // 1. InvacationHandler 를 구현한 객체 메타데이터
     // 2. 프록시가 적용될 객체의 '인스턴스'
@@ -75,11 +96,11 @@ public class ResolveDependency {
         return proxyObject;
     }
 
-    public Object insertProxies(Iterator<MyProxy> iterator, Object instance, Class<?> clazz) {
+    public Object insertProxies(Iterator<ProxyInfo> iterator, Object instance, Class<?> clazz) {
         while(iterator.hasNext()) {
-            MyProxy tmpProxy = iterator.next();
+            ProxyInfo tmpProxy = iterator.next();
             try {
-                instance = insertProxy(tmpProxy.doProxy(), instance, clazz);
+                instance = insertProxy(tmpProxy.handler, instance, clazz);
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -110,7 +131,7 @@ public class ResolveDependency {
         // 먼저 클래스 리스트를 순회한다.
         // 이 과정에서 프록시를 적용한다.
 
-        Iterator<Class<?>> clazzIterator = clazzList.iterator();
+        Iterator<Class<?>> clazzIterator = this.clazzList.iterator();
         while(clazzIterator.hasNext()) {
             Class<?> clazz = clazzIterator.next();
 
@@ -121,6 +142,8 @@ public class ResolveDependency {
             if(isComponent == null) {
                 continue;
             }
+
+            String keyName = clazz.getName();
 
             // MyAutowired 혹은 Default 생성자를 가져온다. --> Spring 과 동일한 규칙을 적용한다.
             Constructor<?> constructor = this.getRequireConstructor(clazz);
@@ -133,6 +156,10 @@ public class ResolveDependency {
             // 객체에 붙은 애너테이션들
             // MyComponent, MyProxy || MyProxies 확인을 위함
             Map<Class<? extends Annotation>, Annotation> clazzAnno = clazzInfo.getClazzAnnotationMap();
+
+            // 미리 이 객체에 붙어있는 프록시 정보를 가져온다. --> 코드 단축화를 위함
+            MyProxy proxy = (MyProxy) clazzAnno.get(MyProxy.class);
+            MyProxies proxies = (MyProxies) clazzAnno.get(MyProxies.class);
 
             // 지정된 생성자의 파라미터 수를 의미한다.
             int paramCount = constructor.getParameterCount();
@@ -147,7 +174,13 @@ public class ResolveDependency {
 
             // 의존성이 필요 없을 경우, 완성된 인스턴스로서 바로 완료 큐에 넣는다.
             if(dependencyCount == 0) {
-                this.completeQueue.add(new CompleteObject(clazz.getName(), instance));
+                // MyProxy 가 단일 혹은 다중으로 존재한다면 실행되는 분기.
+                if(proxy != null || proxies != null) {
+                    instance = this.proxyProcess(proxy, proxies, instance, clazz);
+                    keyName = proxy != null ? proxy.targetInterface().getName() : proxies.targetInterface().getName();
+                }
+
+                this.completeQueue.add(new CompleteObject(keyName, instance));
             } else {
 
                 // 필요 파라미터 객체 의존성 정보 배열 추출
@@ -171,8 +204,14 @@ public class ResolveDependency {
                 System.out.println("normal-dependency Count : " + dependencyCount);
 
                 if(dependencyCount == 0) {
+                    // MyProxy 가 단일 혹은 다중으로 존재한다면 실행되는 분기.
+                    if(proxy != null || proxies != null) {
+                        instance = this.proxyProcess(proxy, proxies, instance, clazz);
+                        keyName = proxy != null ? proxy.targetInterface().getName() : proxies.targetInterface().getName();
+                    }
+
                     // 존재하는 의존성이 모두 Lazy 라면, 해당 의존성들은 모두 해결 된 것으로 보아야 한다.
-                    this.completeQueue.add(new CompleteObject(clazz.getName(), instance));
+                    this.completeQueue.add(new CompleteObject(keyName, instance));
                 } else {
                     // Tracker 등록
                     this.dependencyTracker.put(instance, new AtomicInteger(dependencyCount));
@@ -181,32 +220,6 @@ public class ResolveDependency {
             }
 
             System.out.println("객체에 붙은 애너테이션 사이즈 : " + clazzAnno.size());
-
-            // "객체" 단계는 완성됨 (비록 비완성일 수도 있지만.) --> 프록시 적용
-            MyProxy proxy = (MyProxy) clazzAnno.get(MyProxy.class);
-            MyProxies proxies = (MyProxies) clazzAnno.get(MyProxies.class);
-
-            // MyProxy 가 단일 혹은 다중으로 존재한다면 실행되는 분기.
-            if(proxy != null || proxies != null) {
-                System.out.println(ColorText.cyan("proxy or proxies 가 있다."));
-
-                List<MyProxy> proxyList = new ArrayList<>();
-
-                if(proxy != null) {
-                    proxyList.add(proxy);
-                } else { // proxies 가 있는 상황
-                    MyProxy[] proxyArr = proxies.value();
-                    for(int i = 0; i < proxyArr.length; i++) {
-                        proxyList.add(proxyArr[i]);
-                    }
-                }
-
-                // proxy 적용
-                Iterator<MyProxy> proxyIterator = proxyList.iterator();
-                instance = insertProxies(proxyIterator, instance, clazz);
-            }
-
-
 
         }
 
@@ -455,7 +468,9 @@ public class ResolveDependency {
 
                 // 의존성이 모두 해소되었다면, 완성 인스턴스 큐에 새로 추가한다.
                 if(!isRemainDependency) {
-                    completeQueue.add(new CompleteObject(targetObject.getClass().getName(), targetObject));
+
+
+                    this.completeQueue.add(new CompleteObject(targetObject.getClass().getName(), targetObject));
                     System.out.println("targetObject.name : " + targetObject.getClass().getName());
                 }
             }

@@ -5,10 +5,10 @@ import com.damsoon.util.console.ColorText;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 
-public class ProxyTest implements InvocationHandler {
+public class ExecutionTime implements InvocationHandler {
     private final Object target;
 
-    public ProxyTest(Object target) {
+    public ExecutionTime(Object target) {
         this.target = target;
     }
 
