@@ -4,9 +4,11 @@ import com.damsoon.annotation.*;
 import com.damsoon.util.console.ColorText;
 import com.damsoon.util.type.*;
 
+import java.awt.*;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
 import java.util.*;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class ResolveDependency {
@@ -26,8 +28,11 @@ public class ResolveDependency {
 
     List<Class<?>> clazzList;
 
-    public ResolveDependency(List<Class<?>> clazzList) {
+    boolean isAllowCircular;
+
+    public ResolveDependency(List<Class<?>> clazzList, boolean allowCircularDependency) {
         this.clazzList = clazzList;
+        this.isAllowCircular = allowCircularDependency;
         this.dependencyMap = new HashMap<>();
         this.completeQueue = new LinkedList<>();
         this.dependencyTracker = new HashMap<>();
@@ -52,6 +57,17 @@ public class ResolveDependency {
         return classMetadata;
     }
 
+    /**
+     * 컴포넌트의 MyProxy, MyProxies 둘 중 하나에 표기되어 있는 정보를 토대로 "새로운 프록시" 객체를 만들어 낸다.
+     *
+     * @param proxy 컴포넌트에 단일 프록시 기능만 들어가 있을 경우, null 이 아니다.
+     * @param proxies 컴포넌트에 다중 프록시 기능이 들어가 있을 경우, null 이 아니다.
+     *                이 둘 중 하나는 null 이다.
+     * @param instance 프록시가 적용된 타겟 인스턴스이다.
+     * @param clazz 프록시가 적용되는 클래스 메타데이터 정보이다. 프록시 적용을 위해 모든 인터페이스 정보를 읽기 위함이다.
+     * @return 프록시가 적용된 객체(<code>Object</code>) 를 반환한다. 그러나, 기존 instance 와 묶여진 target Interface 외 어떠한 연결점도 없다.
+     * 따라서 <code>completeQueue</code> 에 들어가기 전에만 사용된다.
+     */
     public Object proxyProcess(MyProxy proxy, MyProxies proxies, Object instance, Class<?> clazz) {
 
         System.out.println(ColorText.cyan("proxy or proxies 가 있다."));
@@ -80,16 +96,14 @@ public class ResolveDependency {
     // 1. InvacationHandler 를 구현한 객체 메타데이터
     // 2. 프록시가 적용될 객체의 '인스턴스'
     // 3. 프록시가 적용될 객체 클래스의 모든 정보. --> 구현된 인터페이스를 모두 추출하기 위함
-    public Object insertProxy(Class<?> handlerInfo, Object instance, Class<?> clazzInfo) throws NoSuchMethodException, InvocationTargetException, InstantiationException, IllegalAccessException {
-
-
+    public Object insertProxy(Class<?> handlerInfo, Class<?> targetInterface, Object instance, Class<?> clazzInfo) throws NoSuchMethodException, InvocationTargetException, InstantiationException, IllegalAccessException {
         Constructor handlerConstructor = handlerInfo.getConstructor(Object.class);
 
         InvocationHandler handlerInstance = (InvocationHandler) handlerConstructor.newInstance(instance);
 
         Object proxyObject = Proxy.newProxyInstance(
                 clazzInfo.getClassLoader(),
-                clazzInfo.getInterfaces(),
+                new Class<?>[] {targetInterface},
                 handlerInstance
         );
 
@@ -100,7 +114,7 @@ public class ResolveDependency {
         while(iterator.hasNext()) {
             ProxyInfo tmpProxy = iterator.next();
             try {
-                instance = insertProxy(tmpProxy.handler, instance, clazz);
+                instance = insertProxy(tmpProxy.handler, tmpProxy.targetInterface, instance, clazz);
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -109,22 +123,89 @@ public class ResolveDependency {
         return instance;
     }
 
-    // Queue 가 비워졌는데도 불구하고, 여전히 Map 에 대기중인 인스턴스들이 존재할 경우 실행한다.
-    // 여기서 멈추어서, "@MyLazy" 와의 궁합을 통한 순환참조 해결에 초점을 두어야 한다.
-    // Solution 1 : MyLazy 선언된 의존성을 따로 모아 "맨 마지막 로직" 에서 의존성을 해결한다. - MyLazy 감지 시 기본 의존성 맵에 등록 x
-    // Solution 2 : Queue 가 비워질 때 마다, Map 의 keySet().next() 를 통해 부분적인 순환 참조를 해결 해 나간다. - MyLazy 사용하기 어려움
+    /**
+     * 결국 순환참조 표시도 하지 않은 모든 의존성을 강제로 해결하는 메서드
+     * 만약 개발자가 "엄격 모드" 를 원한다면, 프로그램은 종료된다.
+     * 그러나 개발자가 순환참조 허용을 원한다면, 프로그램은 종료되지 않고 강제로 의존성을 허용한다. (Default)
+     */
     public void resolveCircularDependency() {
 
-        System.out.println("{UnResolved Dependency Detect!} --> ");
+        System.out.println(ColorText.red("{UnResolved Dependency Detect!} --> "));
 
         Iterator<String> iterator = this.dependencyMap.keySet().iterator();
         while(iterator.hasNext()) {
             String key = iterator.next();
-            System.out.println("UnResolve Dependency Key : " + key);
+            System.out.println(ColorText.yellow("UnResolve Dependency Key : " + key));
         }
 
+        if(!this.isAllowCircular) {
+            throw new RuntimeException("[Exception by Not Allow Circular Dependency]");
+        }
 
         // 의존성 해결 알고리즘이 먼저 작성되어야 한다.
+
+        // 의존성 트래커에 등록되어 있는 "진짜 오브젝트" 들을 순회한다.
+        Iterator<Object> restObjectIter = this.dependencyTracker.keySet().iterator();
+
+        // 통합시킬 메서드가 될 예정이다.
+        while(restObjectIter.hasNext()) {
+            Object restObj = restObjectIter.next();
+            Class<?> restClazz = restObj.getClass();
+            String keyName = restClazz.getName();
+
+            MyProxy proxy = restClazz.getDeclaredAnnotation(MyProxy.class);
+            MyProxies proxies = restClazz.getDeclaredAnnotation(MyProxies.class);
+
+            if(proxy != null || proxies != null) {
+                restObj = this.proxyProcess(proxy, proxies, restObj, restClazz);
+                keyName = proxy != null ? proxy.targetInterface().getName() : proxies.targetInterface().getName();
+            }
+
+            this.completeQueue.add(new CompleteObject(keyName, restObj));
+            // 이 방식으로 제거해야 Iterator 가 제거된 정보와 "동기화" 된다. --> 제거 시 이 방식이 아니면 에러가 난다.
+            restObjectIter.remove();
+        }
+
+        // 이 메서드에서는 오히려 DependencyResolve 클래스의 completeQueue 가 "불완전한 인스턴스" 를 담게 되며,
+        // completeQueue 를 한 번 순회하며 dependencyMap 을 해소 해 주면, 그 때서야 "불완전했던" 인스턴스들이 "완전" 해 진다.
+        // "여기서 고민은," 완전한 인스턴스가 들어가는 자료구조에, 아직 의존성이 완료되지 않은 인스턴스를 넣어도 되냐는 것이다.
+        // 로직 상 맞긴 하지만, 용도가 맞나 싶다.
+
+        while(!this.completeQueue.isEmpty()) {
+            CompleteObject completeObject = this.completeQueue.poll();
+
+            Object instance = completeObject.getObject();
+            String fullName = completeObject.getFullName();
+
+            List<WaitingField> waitingFieldList = this.dependencyMap.get(completeObject.getFullName());
+
+            if(waitingFieldList == null) {
+                this.singletonContainer.put(completeObject.getFullName(), completeObject.getObject());
+                continue;
+            }
+
+            // 의존성 대기 "리스트" 에서 Iterator 를 따로 추출한다.
+            Iterator<WaitingField> waitingIter = waitingFieldList.iterator();
+
+            // 순회하며 의존성을 넣어준다.
+            this.insertRealInstance(waitingIter, instance, DependencyMode.REST);
+
+            // fullName(com.damsoon.component.xxx) 를 필요로 하는 모든 인스턴스에
+            // 의존성을 "실제로" 넣어줬으므로, 대기 Map 에서 제거한다.
+            this.dependencyMap.remove(fullName);
+
+            // 이 의존성은 "모든 의존성" 을 만족시켜주었으므로, 진정한 컨테이너 자료구조에 들어간다.
+            this.singletonContainer.put(fullName, instance);
+
+        }
+
+        // Testing
+
+        Iterator<String> singletonIterator = this.singletonContainer.keySet().iterator();
+        while(singletonIterator.hasNext()) {
+            String keyName = singletonIterator.next();
+            System.out.println(keyName);
+        }
     }
 
     public void resolveStart() {
@@ -177,6 +258,7 @@ public class ResolveDependency {
                 // MyProxy 가 단일 혹은 다중으로 존재한다면 실행되는 분기.
                 if(proxy != null || proxies != null) {
                     instance = this.proxyProcess(proxy, proxies, instance, clazz);
+                    System.out.println(ColorText.cyan("Proxy 진행된 이후의 instance : " + instance.toString()));
                     keyName = proxy != null ? proxy.targetInterface().getName() : proxies.targetInterface().getName();
                 }
 
@@ -194,7 +276,7 @@ public class ResolveDependency {
 
                 // 이 객체의 필요 의존성들을 등록한다. --> MyLazy 붙은 의존성 여기서 등록됨.
                 // Lazy 는 dependencyTracker 수에 포함되면 안된다.
-                int lazyCount = this.registerDependency(dependencyMetadatas, clazz, instance);
+                int lazyCount = this.registerDependency(dependencyMetadatas, clazz, instance, proxy, proxies);
 
                 System.out.println("class : " + clazz.getName());
                 System.out.println("lazyCount : " + lazyCount);
@@ -207,6 +289,7 @@ public class ResolveDependency {
                     // MyProxy 가 단일 혹은 다중으로 존재한다면 실행되는 분기.
                     if(proxy != null || proxies != null) {
                         instance = this.proxyProcess(proxy, proxies, instance, clazz);
+                        System.out.println(ColorText.cyan("Proxy 진행된 이후의 instance : " + instance.toString()));
                         keyName = proxy != null ? proxy.targetInterface().getName() : proxies.targetInterface().getName();
                     }
 
@@ -214,6 +297,7 @@ public class ResolveDependency {
                     this.completeQueue.add(new CompleteObject(keyName, instance));
                 } else {
                     // Tracker 등록
+                    // String key 가 아니라, Object 자체로 비교하기 때문에, proxy 를 고려하지 않아도 된다.
                     this.dependencyTracker.put(instance, new AtomicInteger(dependencyCount));
                 }
 
@@ -239,6 +323,7 @@ public class ResolveDependency {
             Object instance = completeObject.getObject();
 
             System.out.println("Queue 순환 : " + fullName);
+            System.out.println("진짜 인스턴스 : " + instance.toString());
 
             // 이 완성 인스턴스를 받기 위해 대기중인 필드 리스트를 추출한다. -> 넣어준 후 map 에서 remove 한다.
             List<WaitingField> waitingFieldList = this.dependencyMap.get(fullName);
@@ -293,6 +378,8 @@ public class ResolveDependency {
         // 등록된 "모든" lazy 등록 의존성은 '일반 의존성' 이 해소 된 후에 진행한다.
         Iterator<String> lazyIter = this.lazyMap.keySet().iterator();
 
+        System.out.println(ColorText.magenta("is lazyIter has Element? : " + lazyIter.hasNext()));
+
         while(lazyIter.hasNext()) {
             String lazyKey = lazyIter.next();
 
@@ -304,15 +391,10 @@ public class ResolveDependency {
             // 만약 MyLazy 지정해놨는데도 원하는 인스턴스가 완성되지 않았다면, 오류이다.
             // 즉, MyLazy 로 지정한 단일 객체의 인스턴스의 의존성이 해소되지 않은 것이다.
             if(instance == null) {
-                try {
-                    throw new RuntimeException();
-                } catch(RuntimeException e) {
-                    System.out.println("[Exception Lazy in Dependency] : ");
-                    System.out.println("--> 아직까지도 Lazy 처리된 의존성 인스턴스가 존재하지 않음.");
-                    System.out.println("--> Dependency : " + lazyKey + " 객체가 아직도 존재하지 않음.");
-                    e.printStackTrace();
-
-                }
+                System.out.println(ColorText.red("[Exception Lazy in Dependency] : "));
+                System.out.println(ColorText.red("--> 아직까지도 Lazy 처리된 의존성 인스턴스가 존재하지 않음."));
+                System.out.println(ColorText.red("--> Dependency : " + lazyKey + " 객체가 아직도 완성되지 않음."));
+                throw new RuntimeException();
             }
 
             // 원하는 인스턴스를 기다리는 여러 Field 배열
@@ -322,8 +404,8 @@ public class ResolveDependency {
             this.insertRealInstance(lazyList.iterator(), instance, DependencyMode.LAZY);
 
             // lazy 에서 의존 인스턴스를 제거한다.
-            this.lazyMap.remove(lazyKey);
-
+            // this.lazyMap.remove(lazyKey);
+            lazyIter.remove();
         }
     }
 
@@ -350,7 +432,7 @@ public class ResolveDependency {
             if(countConstructorWired > 1) {
                 throw new Exception(
                         "Exception : Multiple MyAutowired Checked in --> "
-                        + clazz.getName()
+                                + clazz.getName()
                 );
             }
         } catch (Exception e) {
@@ -366,6 +448,7 @@ public class ResolveDependency {
         return wiredConstructor;
     }
 
+    // 컴포넌트 클래스 내부에 존재하는 모든 필드 변수 의존성, 필드에 @MyAutowired 가 붙어있는 경우, 이들을 배열로 반환한다.
     public ParamMetadata[] getRequireFields(Class<?> clazz) {
         // 객체 안의 모든 필드가 private, public 이던 모두 가져온다.
         Field[] allFields = clazz.getDeclaredFields();
@@ -427,9 +510,6 @@ public class ResolveDependency {
             }
         }
 
-        Annotation proxy = classMetadata.getClazzAnnotationMap().get("com.damsoon.annotation.MyProxy");
-
-
         return instance;
     }
 
@@ -442,6 +522,10 @@ public class ResolveDependency {
             // 대기중인 인스턴스와 해당되는 필드를 쌍으로 저장하고 있는 형태이다.
             Field targetField = waitingField.getField();
             Object targetObject = waitingField.getObject();
+            Class<?> targetClazz = waitingField.getClazz();
+            String keyName = targetClazz.getName();
+            MyProxy targetProxy = waitingField.getProxy();
+            MyProxies targetProxies = waitingField.getProxies();
 
             // 이러한 변수를 "런타임" 중에 바꿔주기 위해서는, 엄격한 규칙으로 인해
             // "인스턴스" 가 중심이 아니라, "필드" 가 직접 주체가 되어 변경된다.
@@ -452,26 +536,35 @@ public class ResolveDependency {
                 targetField.set(targetObject, realInstance);
             } catch(Exception e) {
                 System.out.println(
+                        ColorText.red(
                         "[Field Access Error - IllegalAccess] : "
-                                + "targetObject : " + targetObject.getClass().getName()
+                                + "targetObject : " + keyName
                                 + ", realInstance : " + realInstance.getClass().getName()
-                        );
+                        )
+                );
                 e.printStackTrace();
             }
 
             // Lazy 의존성 해소 모드가 아닌 경우에만 실행한다.
             if(mode == DependencyMode.NORMAL) {
                 // detectDependency 메서드를 통해 "타겟 인스턴스" 의 의존성이 해소되었는지 확인한다.
+                // dependencyTracker 자료구조에서 targetObject 에 대한 의존성 수를 -1 하고, 의존성이 남아있는지 없는지 bool 값으로 반환한다.
                 boolean isRemainDependency = this.detectDependency(targetObject);
 
                 System.out.println("isRemainDependency : " + isRemainDependency);
 
                 // 의존성이 모두 해소되었다면, 완성 인스턴스 큐에 새로 추가한다.
                 if(!isRemainDependency) {
+                    if(targetProxy != null || targetProxies != null) {
+                        targetObject = this.proxyProcess(targetProxy, targetProxies, targetObject, targetClazz);
+                        System.out.println(ColorText.cyan("Proxy 진행된 이후의 instance : " + targetObject.toString()));
+                        keyName = targetProxy != null
+                                ? targetProxy.targetInterface().getName()
+                                : targetProxies.targetInterface().getName();
+                    }
 
-
-                    this.completeQueue.add(new CompleteObject(targetObject.getClass().getName(), targetObject));
-                    System.out.println("targetObject.name : " + targetObject.getClass().getName());
+                    this.completeQueue.add(new CompleteObject(keyName, targetObject));
+                    System.out.println("targetObject.name : " + keyName);
                 }
             }
 
@@ -479,7 +572,7 @@ public class ResolveDependency {
     }
 
     // 일반 의존성과 lazy 의존성을 "모두" 등록하며, 객체 정보에 존재하는 모든 Lazy 수를 반환한다.
-    private int registerDependency(ParamMetadata[] paramMetadatas, Class<?> clazz, Object instance) {
+    private int registerDependency(ParamMetadata[] paramMetadatas, Class<?> clazz, Object instance, MyProxy proxy, MyProxies proxies) {
         int lazyCount = 0;
 
         // 인스턴스의 파라미터에 붙은 모든 데이터 배열을 순회한다.
@@ -529,8 +622,8 @@ public class ResolveDependency {
                 throw new RuntimeException(e);
             }
 
-            // 의존성을 추가한다.
-            listField.add(new WaitingField(instance, field));
+            // 의존성을 추가한다. -> 의존성에 MyProxy, MyProxies 는 추후 의존성 해결 과정에서 completeQueue.add 하기 전에 프록시 객체로 새로 만드는 데에 사용된다.
+            listField.add(new WaitingField(instance, field, clazz, proxy, proxies));
         }
 
         return lazyCount;
@@ -549,9 +642,14 @@ public class ResolveDependency {
 
         System.out.println("(detectDependency in " + targetObject.toString() + ") : " + result);
 
+        if(result == 0) {
+            this.dependencyTracker.remove(targetObject);
+        }
+
         return result != 0;
     }
 
+    // 생성자 인자의 의존성과 클래스 필드에 선언된 의존성을 합치기 위해 작성 해 놓은 메서드이다. -> 일단 ParamMetadata[] 를 위함.
     private <T> List<T> appendList(T[] list1, T[] list2) {
         List<T> newList = new ArrayList<>();
 

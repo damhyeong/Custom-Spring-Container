@@ -1,5 +1,6 @@
 package com.damsoon.component;
 
+import com.damsoon.annotation.MyAutowired;
 import com.damsoon.annotation.MyComponent;
 import com.damsoon.annotation.MyProxy;
 import com.damsoon.proxy.ExecutionTime;
@@ -12,7 +13,15 @@ interface Component3 {
 @MyComponent
 @MyProxy(handler = ExecutionTime.class, targetInterface = Component3.class)
 public class Component3Impl implements Component3 {
+    Component4 component4;
+
+    @MyAutowired
+    public Component3Impl(Component4 component4) {
+        this.component4 = component4;
+    }
+
     public void testProxy() {
         System.out.println("Method in Component3");
     }
 }
+

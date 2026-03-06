@@ -35,7 +35,9 @@ public class Main {
 
         System.out.println();
 
-        ResolveDependency resolveDependency = new ResolveDependency(clazzList);
+        boolean isAllowCircular = true;
+
+        ResolveDependency resolveDependency = new ResolveDependency(clazzList, isAllowCircular);
 
         resolveDependency.resolveStart();
 
