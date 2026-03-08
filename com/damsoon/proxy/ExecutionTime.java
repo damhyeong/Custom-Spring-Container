@@ -16,15 +16,17 @@ public class ExecutionTime implements InvocationHandler {
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
         System.out.println(ColorText.magenta("proxy 실행됨"));
         // 현재 시간을 가져옴.
-        long startTime = System.nanoTime();
+        long startNanoTime = System.nanoTime();
+        long startMilliTime = System.currentTimeMillis();
 
         // Proxy 적용을 직접적으로 구현
         Object result = method.invoke(target, args);
 
         // 종료 시간을 가져옴.
-        long endTime = System.nanoTime();
+        long endNanoTime = System.nanoTime();
+        long endMilliTime = System.currentTimeMillis();
 
-        System.out.println(ColorText.magenta("시작과 종료에 걸린 시간은 : " + (endTime - startTime)));
+        System.out.println(ColorText.magenta("시작과 종료에 걸린 시간은 : " + (endMilliTime - startMilliTime) + "ms, OR : " + (endNanoTime - startNanoTime) + "ns"));
 
         return result;
     }

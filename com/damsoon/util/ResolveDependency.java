@@ -197,6 +197,30 @@ public class ResolveDependency {
             // 이 의존성은 "모든 의존성" 을 만족시켜주었으므로, 진정한 컨테이너 자료구조에 들어간다.
             this.singletonContainer.put(fullName, instance);
 
+
+        }
+
+        // MyLazy 로 순환참조를 해결하려 했으나, 그마저도 해소되지 않은 상황에서
+        // 마지막 남은 미해결 의존성을 여기서 전부 해결한다.
+        Iterator<String> lastLazyIter = this.lazyMap.keySet().iterator();
+
+        while(lastLazyIter.hasNext()) {
+            String keyName = lastLazyIter.next();
+            List<WaitingField> fieldList = this.lazyMap.get(keyName);
+
+            Object instance = this.singletonContainer.get(keyName);
+
+            if(instance == null) {
+                System.out.println(ColorText.red("[CRITICAL ERROR OCCURR!!!] : 의존성 해결이 완전히 불가능한 객체가 존재합니다."));
+                System.out.println(ColorText.red("--> 필요한 의존성 " + keyName + " 이 존재하지 않습니다."));
+                throw new RuntimeException();
+            }
+
+            Iterator<WaitingField> fieldIterator = fieldList.iterator();
+
+            this.insertRealInstance(fieldIterator, instance, DependencyMode.LAZY);
+
+            lastLazyIter.remove();
         }
 
         // Testing
@@ -204,7 +228,9 @@ public class ResolveDependency {
         Iterator<String> singletonIterator = this.singletonContainer.keySet().iterator();
         while(singletonIterator.hasNext()) {
             String keyName = singletonIterator.next();
+            Object completeInstance = this.singletonContainer.get(keyName);
             System.out.println(keyName);
+            System.out.println("--> " + completeInstance.toString());
         }
     }
 
@@ -348,6 +374,10 @@ public class ResolveDependency {
             this.singletonContainer.put(fullName, instance);
         }
 
+        // 여기서 completeQueue 는 모두 비워지며, 이후 다른 역할로 사용된다.
+        // completeQueue 는 @MyLazy 애너테이션으로도 해소되지 못한 순환참조 의존성들을 넣는데 사용된다.
+        // resolveCircularDependency 메서드에서 this.completeQueue 를 다시 순회하며 강제로 해소한다.
+
         Iterator<String> singletonIter = this.singletonContainer.keySet().iterator();
         while(singletonIter.hasNext()) {
             String key = singletonIter.next();
@@ -362,7 +392,7 @@ public class ResolveDependency {
         }
 
         // Map 이 아직 비워지지 않았을 경우, resolveCircularDependency 를 실행한다.
-        if(dependencyMap.size() != 0) {
+        if(!dependencyMap.isEmpty() || !lazyMap.isEmpty()) {
             this.resolveCircularDependency();
         }
 
@@ -388,13 +418,15 @@ public class ResolveDependency {
             // 완성 컨테이너에서 나중에 가져오도록 지정된 오브젝트가 완성 된 상태인지 확인한다.
             Object instance = this.singletonContainer.get(lazyKey);
 
+
             // 만약 MyLazy 지정해놨는데도 원하는 인스턴스가 완성되지 않았다면, 오류이다.
             // 즉, MyLazy 로 지정한 단일 객체의 인스턴스의 의존성이 해소되지 않은 것이다.
             if(instance == null) {
                 System.out.println(ColorText.red("[Exception Lazy in Dependency] : "));
                 System.out.println(ColorText.red("--> 아직까지도 Lazy 처리된 의존성 인스턴스가 존재하지 않음."));
                 System.out.println(ColorText.red("--> Dependency : " + lazyKey + " 객체가 아직도 완성되지 않음."));
-                throw new RuntimeException();
+                System.out.println(ColorText.red("--> 해당 의존성은 강제 의존성 해결 단계에서 해소됩니다."));
+                continue;
             }
 
             // 원하는 인스턴스를 기다리는 여러 Field 배열
