@@ -9,15 +9,11 @@ public class WaitingField {
     Object object;
     Field field;
     Class<?> clazz;
-    MyProxy proxy;
-    MyProxies proxies;
 
-    public WaitingField(Object object, Field field, Class<?> clazz, MyProxy proxy, MyProxies proxies) {
+    public WaitingField(Object object, Field field, Class<?> clazz) {
         this.object = object;
         this.field = field;
         this.clazz = clazz;
-        this.proxy = proxy;
-        this.proxies = proxies;
     }
 
     public Object getObject() {
@@ -28,11 +24,5 @@ public class WaitingField {
     }
     public Class<?> getClazz() {
         return this.clazz;
-    }
-    public MyProxy getProxy() {
-        return this.proxy;
-    }
-    public MyProxies getProxies() {
-        return this.proxies;
     }
 }

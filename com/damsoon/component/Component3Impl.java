@@ -11,7 +11,7 @@ interface Component3 {
 
 // 여러 애너테이션이 붙어 있는 상황을 연출
 @MyComponent
-@MyProxy(handler = ExecutionTime.class, targetInterface = Component3.class)
+@MyProxy(proxy = ExecutionTime.class, targetInterface = Component3.class)
 public class Component3Impl implements Component3 {
     Component4 component4;
 

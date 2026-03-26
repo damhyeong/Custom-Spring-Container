@@ -1,6 +1,7 @@
 package com.damsoon.annotation;
 
 import java.lang.annotation.*;
+import java.lang.reflect.InvocationHandler;
 
 @Documented
 // JVM 에서 인스턴스 생성 이후 Proxy 를 적용 해 주어야 하기 때문.
@@ -9,7 +10,7 @@ import java.lang.annotation.*;
 @Target(ElementType.TYPE)
 public @interface MyProxy {
     // Proxy 역할을 할 메서드를 가지고 있는 클래스 메타데이터를 가져야 한다.
-    Class<?> handler();
+    Class<? extends InvocationHandler> proxy();
     Class<?> targetInterface();
 }
 

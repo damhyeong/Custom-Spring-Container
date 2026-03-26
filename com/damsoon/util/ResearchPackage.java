@@ -58,8 +58,6 @@ public class ResearchPackage {
     }
 
     private void scan(File file, String packageName) throws ClassNotFoundException, IOException {
-        System.out.println("scan start");
-
         // 하나의 파일(.class) 이건, 디렉토리이건 동일한 File[] 정보를 가져온다.
         File[] tmpFiles = file.listFiles();
 
@@ -84,10 +82,6 @@ public class ResearchPackage {
 
                 // .class 파일의 메타데이터를 읽은 상태.
                 Class<?> clazzData = Class.forName(className);
-
-                Annotation[] annotations = clazzData.getAnnotations();
-
-                System.out.println(clazzData.getName() + " : " + Arrays.toString(annotations));
 
                 this.clazzList.add(clazzData);
             }
