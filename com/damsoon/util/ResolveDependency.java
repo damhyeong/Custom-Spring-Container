@@ -198,7 +198,8 @@ public class ResolveDependency {
             // 위에서 추출된 instance 가 어떠한 의존성도 필요 없었을 경우, 곧바로 Queue 로 넣는다.(이미 완성된 객체)
             if(dependencyCount == 0) {
                 // 등록되어야 할 패키지 문자열과 동시에, 프록시 or 원본 인스턴스를 넣어 완성한다.
-                CompleteObject completeObject = new CompleteObject(keyName, this.proxyContainer.get(instance));
+
+                CompleteObject completeObject = this.proxyContainer.get(instance);
                 this.completeQueue.add(completeObject);
             } else {
 
@@ -219,7 +220,7 @@ public class ResolveDependency {
 
                 // 만약 일반 의존성이 존재하지 않는다면,
                 if(dependencyCount == 0) {
-                    CompleteObject completeObject = new CompleteObject(keyName, this.proxyContainer.get(instance));
+                    CompleteObject completeObject = this.proxyContainer.get(instance);
 
                     // 존재하는 의존성이 모두 Lazy 라면, 해당 의존성들은 모두 해결 된 것으로 보아야 한다.
                     this.completeQueue.add(completeObject);
@@ -237,7 +238,6 @@ public class ResolveDependency {
         // 여기까지 완료 된 상태이다.
 
         // "의존성 해소 1 단계"
-        // 일반 의존성이나, MyLazy 로 인해 "일단 의존성이 해결되어 있는" 인스턴스들을 기준으로 해소한다.
         while(!this.completeQueue.isEmpty()) {
             // 완성되어 있는 인스턴스 객체 하나를 큐에서 꺼낸다.
             CompleteObject completeObject = this.completeQueue.poll();
@@ -328,7 +328,7 @@ public class ResolveDependency {
             // 완성 컨테이너에서 나중에 가져오도록 지정된 오브젝트가 완성 된 상태인지 확인한다.
             Object instance = this.singletonContainer.get(lazyKey);
 
-            // 만약 MyLazy 지정해놨는데도 원하는 인스턴스가 완성되지 않았다면, 개발자가 의도하지 않은 오류에 해당한다.
+            // 만약 의존성을 "@MyLazy" 지정해놨는데도 원하는 인스턴스가 완성되지 않았다면, 개발자가 의도하지 않은 오류에 해당한다.
             // 따라서 의존성 해결 3 단계(resolveCircularDependency) 로 넘겨 이에 대한 경고를 출력한다.
             if(instance == null) {
                 System.out.println(ColorText.red("[Exception Lazy in Dependency] : "));
@@ -351,67 +351,71 @@ public class ResolveDependency {
     }
 
     /**
-     * 결국 순환참조 표시도 하지 않은 모든 의존성을 강제로 해결하는 메서드
+     * 의존성 해결 3 단계.
+     * 결국 의도적이지 않은 완벽한 순환참조, 혹은 "@MyLazy" 표기했음에도 순환참조로 이어지는 모든 의존성을 해결한다.
      * 만약 개발자가 "엄격 모드" 를 원한다면, 프로그램은 종료된다.
-     * 그러나 개발자가 순환참조 허용을 원한다면, 프로그램은 종료되지 않고 강제로 의존성을 허용한다. (Default)
+     * (만약 ResolveDependency 클래스 변수의 isAllowCircular 이 FALSE 라면.
+     * 그러나 개발자가 순환참조 허용을 원한다면, 프로그램은 종료되지 않고 강제로 의존성을 허용한다. (Default == TRUE)
      */
     public void resolveCircularDependency() {
-
+        // 사용자에게 의도적으로 "아직도 해소되지 않은" 모든 의존성을 보여준다.
         System.out.println(ColorText.red("{UnResolved Dependency Detect!} --> "));
 
-        Iterator<String> iterator = this.dependencyMap.keySet().iterator();
-        while(iterator.hasNext()) {
-            String key = iterator.next();
-            System.out.println(ColorText.yellow("UnResolve Dependency Key : " + key));
+        // 일반 의존성으로서 해소되지 못한 순환참조들
+        Iterator<String> normalIterator = this.dependencyMap.keySet().iterator();
+        while(normalIterator.hasNext()) {
+            String normalKey = normalIterator.next();
+            System.out.println(ColorText.yellow("UnResolve Dependency Key : " + normalKey));
         }
 
+        // 사용자가 컴포넌트 의존성으로 "@MyLazy" 를 붙였는데도 불구하고, 순환참조 해결이 되지 않은 경우.
+        Iterator<String> lazyIterator = this.lazyMap.keySet().iterator();
+        while(lazyIterator.hasNext()) {
+            String lazyKey = normalIterator.next();
+            System.out.println(ColorText.yellow("UnResolve Dependency Key : " + lazyKey));
+            System.out.println(ColorText.yellow("--> MyLazy 의존성"));
+        }
+
+        // 사용자가 만약 "엄격 모드" (isAllowCircular) 를 FALSE 로 해 놓았을 경우.
         if(!this.isAllowCircular) {
             throw new RuntimeException("[Exception by Not Allow Circular Dependency]");
         }
 
-        // 의존성 해결 알고리즘이 먼저 작성되어야 한다.
-
-        // 의존성 트래커에 등록되어 있는 "진짜 오브젝트" 들을 순회한다.
+        // 일반 의존성 중, "완벽한 순환참조" 구조에 갇힌 모든 의존성 객체를 순회한다.
         Iterator<Object> restObjectIter = this.dependencyTracker.keySet().iterator();
-
-        // 통합시킬 메서드가 될 예정이다.
         while(restObjectIter.hasNext()) {
             Object restObj = restObjectIter.next();
-            Class<?> restClazz = restObj.getClass();
-            String keyName = restClazz.getName();
 
-            MyProxy proxy = restClazz.getDeclaredAnnotation(MyProxy.class);
-            MyProxies proxies = restClazz.getDeclaredAnnotation(MyProxies.class);
+            // 이 객체와 매칭되어 있는 Proxy 객체, 혹은 자기 자신의 주소를 가져온다.
+            CompleteObject completeObject = this.proxyContainer.get(restObj);
 
-            if(proxy != null || proxies != null) {
-                restObj = this.proxyProcess(proxy, proxies, restObj, restClazz);
-                keyName = proxy != null ? proxy.targetInterface().getName() : proxies.targetInterface().getName();
-            }
+            // Dead Lock 구조에 갇혀버린 인스턴스들을 넣는 과정이다.
+            this.completeQueue.add(completeObject);
 
-            this.completeQueue.add(new CompleteObject(keyName, restObj));
             // 이 방식으로 제거해야 Iterator 가 제거된 정보와 "동기화" 된다. --> 제거 시 이 방식이 아니면 에러가 난다.
             restObjectIter.remove();
         }
 
-        // 이 메서드에서는 오히려 DependencyResolve 클래스의 completeQueue 가 "불완전한 인스턴스" 를 담게 되며,
-        // completeQueue 를 한 번 순회하며 dependencyMap 을 해소 해 주면, 그 때서야 "불완전했던" 인스턴스들이 "완전" 해 진다.
-        // "여기서 고민은," 완전한 인스턴스가 들어가는 자료구조에, 아직 의존성이 완료되지 않은 인스턴스를 넣어도 되냐는 것이다.
-        // 로직 상 맞긴 하지만, 용도가 맞나 싶다.
-
+        // 나머지 인스턴스들을 대상으로 "의존성 해결 1 단계" 와 유사한 로직을 구사한다.
+        // 단, 해소되지 않은 모든 인스턴스를 모두 Queue 에 넣었기 때문에, 더 이상 Queue 에 들어갈 필요가 없다.
         while(!this.completeQueue.isEmpty()) {
+            // 순환참조 인스턴스 하나를 뽑는다.
             CompleteObject completeObject = this.completeQueue.poll();
 
+            // 해당 인스턴스와 패키지 이름을 추출한다.
             Object instance = completeObject.getObject();
             String fullName = completeObject.getFullName();
 
+            // 자신을 기다리는 (필드-인스턴스) 쌍 배열을 추출한다.
             List<WaitingField> waitingFieldList = this.dependencyMap.get(completeObject.getFullName());
 
+            // 만약 자신을 기다리는 의존성이 없다면, 최종적으로 "컨테이너" 에 들어가 완성된다.
             if(waitingFieldList == null) {
                 this.singletonContainer.put(completeObject.getFullName(), completeObject.getObject());
                 continue;
             }
 
-            // 의존성 대기 "리스트" 에서 Iterator 를 따로 추출한다.
+            // Iterator 를 추출한다.
             Iterator<WaitingField> waitingIter = waitingFieldList.iterator();
 
             // 순회하며 의존성을 넣어준다.
@@ -423,26 +427,30 @@ public class ResolveDependency {
 
             // 이 의존성은 "모든 의존성" 을 만족시켜주었으므로, 진정한 컨테이너 자료구조에 들어간다.
             this.singletonContainer.put(fullName, instance);
-
-
         }
 
-        // MyLazy 로 순환참조를 해결하려 했으나, 그마저도 해소되지 않은 상황에서
-        // 마지막 남은 미해결 의존성을 여기서 전부 해결한다.
+        // 마지막으로, 사용자가 "@MyLazy" 처리를 했음에도 순환참조에 갇힌 의존성들을 해소한다.
         Iterator<String> lastLazyIter = this.lazyMap.keySet().iterator();
-
         while(lastLazyIter.hasNext()) {
+            // "@MyLazy" 로서 필요했던 패키지 클래스 이름을 가져온다.
             String keyName = lastLazyIter.next();
+
+            // keyName 클래스 인스턴스를 원하는 배열(필드-인스턴스) 을 가져온다.
             List<WaitingField> fieldList = this.lazyMap.get(keyName);
 
+            // 필요한 "모든 의존성" 은 이제 컨테이너에 들어가 있다.
             Object instance = this.singletonContainer.get(keyName);
 
+            // 그럼에도 불구하고 인스턴스가 존재하지 않는다면, 이건 치명적인 에러다.
+            // 여러 시나리오가 있을 수 있는데, 필요한 의존성 클래스에 "@MyComponent" 애너테이션을 달지 않았을 때 발생한다.
+            // Dead Lock 을 뜯어서 모든 일반 의존성을 강제로 해소했기 때문이다.
             if(instance == null) {
                 System.out.println(ColorText.red("[CRITICAL ERROR OCCURR!!!] : 의존성 해결이 완전히 불가능한 객체가 존재합니다."));
                 System.out.println(ColorText.red("--> 필요한 의존성 " + keyName + " 이 존재하지 않습니다."));
                 throw new RuntimeException();
             }
 
+            // "@MyLazy" 로서 필요했던 의존성이 존재한다면, 기다리는 모든 의존성들을 해소 해 준다.
             Iterator<WaitingField> fieldIterator = fieldList.iterator();
 
             this.insertRealInstance(fieldIterator, instance, DependencyMode.LAZY);
@@ -450,8 +458,7 @@ public class ResolveDependency {
             lastLazyIter.remove();
         }
 
-        // Testing
-
+        // Testing - 컨테이너에 들어간 "모든" 인스턴스들을 체크한다.
         Iterator<String> singletonIterator = this.singletonContainer.keySet().iterator();
         while(singletonIterator.hasNext()) {
             String keyName = singletonIterator.next();
