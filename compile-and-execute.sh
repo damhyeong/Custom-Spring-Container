@@ -2,8 +2,12 @@
 
 echo "컴파일 & 실행 구문 시작"
 
-javac -d result/bin -parameters $(find com -name "*.java")
+maven_path="./target"
 
-java -cp ./result/bin com.damsoon.Main
+javac -d ${maven_path}/classes -parameters $(find src/com -name "*.java")
+
+javac -d ${maven_path}/test-classes -parameters -cp ${maven_path}/classes $(find src/test -name "*.java")
+
+java -cp ${maven_path}/classes:${maven_path}/test-classes com.damsoon.MainTestRunner
 
 echo "컴파일 & 실행 구문 종료"
