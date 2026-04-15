@@ -2,26 +2,24 @@ package com.damsoon;
 
 import com.damsoon.util.ResearchPackage;
 import com.damsoon.util.ResolveDependency;
+import com.damsoon.util.console.ColorText;
 
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
-import java.lang.reflect.Proxy;
 import java.util.List;
 
 public class Main {
     // 추가되어야 할 Exception 이 너무 많아 Exception 으로 작성.
     public static void main(String[] args) throws Exception {
 
-        ResearchPackage testResearch = new ResearchPackage(Main.class.getPackageName());
+        // Custom Logo 먼저 출력하고 시작하기
+        printLogo();
 
-        System.out.println(Main.class.getPackageName());
+        ResearchPackage testResearch = new ResearchPackage(Main.class.getPackageName());
 
         testResearch.startScan();
 
         List<Class<?>> clazzList = testResearch.getClazzList();
 
-        System.out.println("메타데이터 확인 절차 시작");
+        System.out.println("[System] : 메타데이터 확인 절차 시작");
 
         for(int i = 0; i < clazzList.size(); i++) {
             Class<?> tmpClazz = clazzList.get(i);
@@ -41,32 +39,26 @@ public class Main {
 
         resolveDependency.resolveStart();
 
-        /**
-        // 현재 스레드의 클래스로더를 가져온다.
-        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
 
-        // 공식문서에서 clazz 를 사용하는 것을 보면, 클래스 메타데이터는 보통 이렇게 선언하는 것이 Convention 이라는 것을 말한다.
-        Class<?> funcClazz = classLoader.loadClass("com.damsoon.func.FuncClass");
-        Class<?> testClazz = classLoader.loadClass("com.damsoon.test.TestClass");
-
-        Constructor<?> funcConstructor = funcClazz.getDeclaredConstructor();
-        Constructor<?> testConstructor = testClazz.getDeclaredConstructor(funcClazz);
-
-        Object funcInstance = funcConstructor.newInstance();
-        Object testInstance = testConstructor.newInstance(funcInstance);
-
-
-        Method funcToString = funcClazz.getMethod("toString");
-        Method testToString = testClazz.getMethod("toString");
-
-        String funcString = (String)funcToString.invoke(funcInstance);
-        String testString = (String)testToString.invoke(testInstance);
-
-        System.out.println(funcString);
-        System.out.println(testString);
-
-        */
     }
 
+
+    public static void printLogo() {
+        String logo = """
+             ------------------------------------------------
+             ____                                        
+            |  _ \\  __ _ _ __ ___  ___  ___   ___  _ __  
+            | | | |/ _` | '_ ` _ \\/ __|/ _ \\ / _ \\| '_ \\ 
+            | |_| | (_| | | | | | \\__ \\ (_) | (_) | | | |
+            |____/ \\__,_|_| |_| |_|___/\\___/ \\___/|_| |_|
+                                                         
+             :: Damsoon Framework :: (v1.0.0-SNAPSHOT)
+             :: Initialization Sequence Started ::
+             ------------------------------------------------
+            """;
+
+        // ColorText 유틸리티를 사용하여 프레임워크의 메인 컬러(예: 시안색)로 출력
+        System.out.println(ColorText.cyan(logo));
+    }
 }
 
