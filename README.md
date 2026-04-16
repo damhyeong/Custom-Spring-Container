@@ -69,8 +69,8 @@ flowchart TD
 subgraph Phase1 ["Phase 1: Context Initialization (DI & IoC)"]
 direction TB
 Scan[1. DFS 패키지 스캐너] -->|Class Metadata| Resolve[2. Dependency Resolver]
-Resolve -->|@MyAutowired 감지| Tracker[3. Dependency Tracker]
-Tracker -->|순환참조 감지| Lazy[4. @MyLazy / Deadlock Resolution]
+Resolve -->|MyAutowired 감지| Tracker[3. Dependency Tracker]
+Tracker -->|순환참조 감지| Lazy[4. MyLazy / Deadlock Resolution]
 Lazy -->|AOP / Proxy 파싱| Proxy[5. Dynamic Proxy Injection]
 Proxy -->|인스턴스 조립| Container[(6. Custom Container)]
 end
