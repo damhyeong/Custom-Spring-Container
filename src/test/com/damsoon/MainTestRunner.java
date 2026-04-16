@@ -1,12 +1,9 @@
 package com.damsoon;
 
-import com.damsoon.util.ResolveDependency;
-
 public class MainTestRunner {
     public static void main(String[] args) {
-        System.out.println("테스트 출력");
+        // Ready to Test
+        // [테스팅 기능 준비중]
 
-
-        ResolveDependency test = null;
     }
 }

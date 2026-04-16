@@ -1,6 +1,7 @@
 package com.damsoon;
 
 import com.damsoon.container.CustomContainer;
+import com.damsoon.server.DamsoonHttpServer;
 import com.damsoon.util.ResearchPackage;
 import com.damsoon.util.ResolveDependency;
 import com.damsoon.util.console.ColorText;
@@ -42,6 +43,22 @@ public class Main {
 
         CustomContainer customContainer = new CustomContainer(resolveDependency.getSingletonContainer());
 
+        System.out.println(ColorText.green("\n[Resolve Complete] : 모든 의존성 주입이 완료. 웹 서버 테스팅 시작."));
+
+        try {
+            // Http Server 는 만들어진 컴포넌트들을 소통할 수 있게 만들어 줘야 하므로 완성된 인스턴스 컨테이너를 건네준다.
+            DamsoonHttpServer server = new DamsoonHttpServer(customContainer);
+
+            // 요청 대기 포트 통용 Port 8080 으로 설정.
+            server.start(8080);
+
+            // Main 로직이 웹 서버를 바로 끄면 안되므로.
+            Thread.currentThread().join();
+
+        } catch (Exception e) {
+            System.out.println(ColorText.red("[System Error] : Http 서버 구동에 실패했습니다."));
+            throw new RuntimeException(e);
+        }
     }
 
 
