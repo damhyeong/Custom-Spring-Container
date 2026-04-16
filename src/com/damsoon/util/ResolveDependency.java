@@ -715,6 +715,9 @@ public class ResolveDependency {
 
         return newList;
     }
+    public Map<String, Object> getSingletonContainer() {
+        return this.singletonContainer;
+    }
 }
 
 

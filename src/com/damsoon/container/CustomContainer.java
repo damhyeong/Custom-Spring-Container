@@ -1,18 +1,16 @@
 package com.damsoon.container;
 
-import com.damsoon.annotation.MyComponent;
-
 import java.lang.reflect.Constructor;
 import java.util.HashMap;
 import java.util.Map;
 
 public class CustomContainer {
     private Map<String, Constructor> constructorMap;
-    private Map<String, Object> instanceMap;
+    private Map<String, Object> singletonContainer;
 
-    public CustomContainer (){
+    public CustomContainer (Map<String, Object> singletonContainer){
         constructorMap = new HashMap<>();
-        instanceMap = new HashMap<>();
+        this.singletonContainer = singletonContainer;
     }
 
     public Map<String, Constructor> getConstructorSet() {
@@ -35,12 +33,13 @@ public class CustomContainer {
         return alreadyContain == null ? true : false;
     }
 
-    public Map<String, Object> getInstanceSet() {
-        return this.instanceMap;
+
+    public Map<String, Object> getSingletonContainer() {
+        return this.singletonContainer;
     }
 
     public boolean addInstance(String fullPackageName, Object object) {
-        Object alreadyContain = this.instanceMap.get(fullPackageName);
+        Object alreadyContain = this.singletonContainer.get(fullPackageName);
 
         if(alreadyContain != null) {
             System.out.println(
@@ -51,7 +50,7 @@ public class CustomContainer {
             );
         }
 
-        this.instanceMap.put(fullPackageName, object);
+        this.singletonContainer.put(fullPackageName, object);
 
         return alreadyContain == null ? true : false;
     }

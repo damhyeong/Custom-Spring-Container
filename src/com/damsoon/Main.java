@@ -1,5 +1,6 @@
 package com.damsoon;
 
+import com.damsoon.container.CustomContainer;
 import com.damsoon.util.ResearchPackage;
 import com.damsoon.util.ResolveDependency;
 import com.damsoon.util.console.ColorText;
@@ -39,6 +40,7 @@ public class Main {
 
         resolveDependency.resolveStart();
 
+        CustomContainer customContainer = new CustomContainer(resolveDependency.getSingletonContainer());
 
     }
 
