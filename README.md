@@ -1,5 +1,3 @@
-[로고 및 프로젝트 명]
-
 ## 1. Overview (개요 및 철학)
 
 **Damsoon Framework** 는 `Spring`, `Tomcat` 과 같은 외부 라이브러리의 도움 없이
