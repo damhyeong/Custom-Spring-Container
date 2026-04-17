@@ -64,7 +64,7 @@ Damsoon Framework 는 순수 Java 리플렉션을 이용하여
 2 단계의 파이프라인 구조를 가집니다.
 
 ```mermaid
-flowchart TD
+flowchart TB
 
 subgraph Phase1 ["Phase 1: Context Initialization (DI & IoC)"]
 direction TB
